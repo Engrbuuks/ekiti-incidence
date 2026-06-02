@@ -141,8 +141,8 @@ const SEARCH_INDEX = (()=>{
   return idx;
 })();
 
-function StatCard({d,value,label,danger}){
-  return (<article className="stat-card"><Ic d={d} className={danger?'red':'green'} size={30}/><strong className={danger?'red':''}>{value}</strong><span>{label}</span></article>);
+function StatCard({d,value,label,tone}){
+  return (<article className="stat-card"><Ic d={d} className={tone||'green'} size={30}/><strong className={tone||''}>{value}</strong><span>{label}</span></article>);
 }
 
 function LgaScreen({go, incidents}){
@@ -156,6 +156,8 @@ function LgaScreen({go, incidents}){
   },[query]);
 
   const openIncidents = incidents.filter(i=>i.status!=='Resolved').length;
+  const resolvedIncidents = incidents.filter(i=>i.status==='Resolved').length;
+  const totalIncidents = incidents.length;
 
   const goResult=(r)=>{
     const L=DATA.lgas[r.li];
@@ -189,7 +191,12 @@ function LgaScreen({go, incidents}){
         <StatCard d={P.building} value={TOTAL_LGAS} label="LGAs"/>
         <StatCard d={P.users} value={TOTAL_WARDS} label="Wards"/>
         <StatCard d={P.pin} value={TOTAL_PUS.toLocaleString()} label="Polling Units"/>
-        <StatCard d={P.alert} value={openIncidents} label="Open Incidents" danger/>
+      </section>
+      <h2 className="sec-title">INCIDENTS</h2>
+      <section className="stats-grid incidents-row">
+        <StatCard d={P.alert} value={openIncidents} label="Open" tone="red"/>
+        <StatCard d={P.checkCircle} value={resolvedIncidents} label="Resolved" tone="green"/>
+        <StatCard d={P.reports} value={totalIncidents} label="Total" tone="muted"/>
       </section>
       <section className="lga-section">
         <h1 className="sec-title">LOCAL GOVERNMENT AREAS ({TOTAL_LGAS})</h1>
@@ -362,15 +369,33 @@ function PuScreen({go, ctx, incidents, contacts, perms}){
 }
 
 /* ===================== SCREEN 5 : INCIDENT DETAILS ===================== */
-function DetailScreen({item, perms={}}){
-  const it = item || {};
+function DetailScreen({item, perms={}, incidents=[], onUpdateStatus}){
+  const base = item || {};
+  // use the live version from the list (reflects status changes), fall back to passed item
+  const it = incidents.find(x=>x.ref===base.ref) || base;
+  const [picking,setPicking]=useState(false);
+  const [busy,setBusy]=useState(false);
   const loc = it.lga ? <>{it.puName}<br/>{it.ward}, {it.lga} ({it.puCode})</> : <>—</>;
   const dateStr = it.date && it.time ? `${it.date}  •  ${it.time}` : (it.time||'—');
+
+  const STATUSES = perms.canResolve
+    ? ['Open','In Progress','Escalated','Resolved']
+    : ['Open','In Progress','Escalated'];   // non-managers can't resolve
+
+  const doStatus=(s)=>{
+    if(!onUpdateStatus) return;
+    setBusy(true);
+    Promise.resolve(onUpdateStatus(it.ref, s)).then(()=>{ setBusy(false); setPicking(false); });
+  };
+  const escalate=()=>doStatus('Escalated');
+
+  const statusTone = it.status==='Resolved'?'soft-green':(it.status==='In Progress'?'soft-amber':'soft-red');
+
   return (<>
     <nav className="breadcrumbs"><span>{it.lga||'—'}</span><b>›</b><span>{it.ward||'—'}</span><b>›</b><span>PU {it.puCode?it.puCode.split('/').pop():'—'}</span><b>›</b><em>Incident Details</em></nav>
     <section className="title-row">
       <div className="incident-avatar"><Ic d={P.users}/></div>
-      <div><h1 className="screen-h1 nm">Incident Details</h1><div className="title-meta"><span className="badge outline-red">{it.status||'Open'}</span><span>{it.ref||'INC-PENDING'}</span></div></div>
+      <div><h1 className="screen-h1 nm">Incident Details</h1><div className="title-meta"><span className={`badge ${it.status==='Resolved'?'outline-green':'outline-red'}`}>{it.status||'Open'}</span><span>{it.ref||'INC-PENDING'}</span></div></div>
       <button className="menu-button"><Ic d={P.menu}/></button>
     </section>
     <section className="details-card">
@@ -380,26 +405,29 @@ function DetailScreen({item, perms={}}){
       <div className="detail-row"><div className="detail-icon green"><Ic d={P.user}/></div><div className="detail-label">Reporter</div><div className="detail-value">{it.reporter||'—'}{it.reporterPhone && <><br/><a className="detail-phone" href={`tel:${it.reporterPhone}`}><Ic d={P.phone} size={15}/>{it.reporterPhone}</a></>}</div></div>
       <div className="detail-row"><div className="detail-icon blue"><LocIc/></div><div className="detail-label">Location</div><div className="detail-value">{loc}</div></div>
       <div className="detail-row"><div className="detail-icon blue"><Ic d={P.doc}/></div><div className="detail-label">Description</div><div className="detail-value">{it.desc||'—'}</div></div>
-      <div className="last-updated"><span>Last Updated</span><strong>{dateStr}</strong></div>
+      <div className="detail-row"><div className="detail-icon green"><Ic d={P.checkCircle}/></div><div className="detail-label">Status</div><div className="detail-value"><span className={`badge ${statusTone}`}>{it.status||'Open'}</span></div></div>
     </section>
-    {it.photo && <section className="photo-section"><h2 className="sec-title nm">Photo (1)</h2><div className="photo-card"><img src={it.photo} alt="Incident evidence"/><span><Ic d={P.zoom}/></span></div></section>}
-    <section className="timeline-section">
-      <div className="section-head"><h2 className="sec-title nm">Activity Timeline</h2></div>
-      <div className="timeline">
-        <div className="timeline-item">
-          <span className="rail-dot"></span>
-          <div className="timeline-icon green"><Ic d={P.plus}/></div>
-          <div className="timeline-copy"><h3>Incident Created</h3><p>by {it.reporter||'—'}</p></div>
-          <time className="t-time">{it.date}{'\n'}{it.time}</time>
-        </div>
-      </div>
-    </section>
+    {(it.photo||it.photoLink) && <section className="photo-section"><h2 className="sec-title nm">Photo (1)</h2><div className="photo-card"><img src={it.photo||it.photoLink} alt="Incident evidence"/><span><Ic d={P.zoom}/></span></div></section>}
+
     {(perms.canUpdateStatus || perms.canEscalate) ? (
-      <section className="actions"><h2 className="sec-title nm">Actions</h2><div className="action-grid">
-        {perms.canUpdateStatus && <button className="green"><Ic d={P.edit}/>Update Status</button>}
-        <button className="blue"><Ic d={P.comment}/>Add Comment</button>
-        {perms.canEscalate && <button className="red"><Ic d={P.up}/>Escalate</button>}
-      </div></section>
+      <section className="actions"><h2 className="sec-title nm">Actions</h2>
+        {picking ? (
+          <div className="status-picker">
+            <p className="status-picker-title">Set status to:</p>
+            <div className="status-options">
+              {STATUSES.map(s=>(
+                <button key={s} className={`status-opt ${it.status===s?'on':''}`} disabled={busy} onClick={()=>doStatus(s)}>{s}</button>
+              ))}
+            </div>
+            <button className="ghost-btn full" disabled={busy} onClick={()=>setPicking(false)}>Cancel</button>
+          </div>
+        ) : (
+          <div className="action-grid">
+            {perms.canUpdateStatus && <button className="green" onClick={()=>setPicking(true)}><Ic d={P.edit}/>Update Status</button>}
+            {perms.canEscalate && <button className="red" disabled={busy} onClick={escalate}><Ic d={P.up}/>Escalate</button>}
+          </div>
+        )}
+      </section>
     ) : (
       <section className="actions"><p className="readonly-note">You have view-only access to this incident.</p></section>
     )}
@@ -806,7 +834,45 @@ function App(){
       .then(d=>{ if(d && d.ok && d.contacts){ setContacts(d.contacts); setOnline(true); } })
       .catch(()=>setOnline(false));
   };
-  useEffect(()=>{ if(effectiveAuth) loadContacts(); },[auth]);
+
+  // map a Sheet incident row (column-named) into the app's incident shape
+  const mapRow=(row)=>{
+    const lga=String(row['LGA']||''), ward=String(row['Ward']||''), puCode=String(row['PU Code']||'');
+    const li=DATA.lgas.findIndex(L=>L.n===lga);
+    const wi=li>=0?DATA.lgas[li].w.findIndex(w=>w.n===ward):-1;
+    const pi=(li>=0&&wi>=0)?DATA.lgas[li].w[wi].p.findIndex(p=>p[0]===puCode):-1;
+    return {
+      ref:String(row['Reference']||''), title:String(row['Incident Type']||''),
+      sev:String(row['Severity']||''), desc:String(row['Description']||''),
+      date:String(row['Date']||''), time:String(row['Time']||''),
+      status:String(row['Status']||'Open'),
+      reporter:String(row['Reporter Name']||''), reporterPhone:String(row['Reporter Phone']||'').replace(/^'/,''),
+      lga, ward, puName:String(row['PU Name']||''), puCode,
+      lgaIndex:li, wardIndex:wi, puIndex:pi,
+      photoLink:String(row['Photo Link']||''), synced:true, error:null,
+    };
+  };
+
+  const loadIncidents=()=>{
+    if(!BACKEND_URL || !effectiveAuth) return;
+    fetch(BACKEND_URL+'?action=incidents&code='+encodeURIComponent(effectiveAuth.code)+'&secret='+encodeURIComponent(SHARED_SECRET))
+      .then(r=>r.json())
+      .then(d=>{
+        if(d && d.ok && Array.isArray(d.incidents)){
+          setOnline(true);
+          const remote=d.incidents.map(mapRow).filter(x=>x.ref);
+          // keep any local unsynced/rejected ones the server hasn't acknowledged
+          setIncidents(local=>{
+            const remoteRefs=new Set(remote.map(x=>x.ref));
+            const localOnly=local.filter(x=>!x.synced || x.error || !remoteRefs.has(x.ref));
+            return [...remote, ...localOnly];
+          });
+        }
+      })
+      .catch(()=>setOnline(false));
+  };
+
+  useEffect(()=>{ if(effectiveAuth){ loadContacts(); loadIncidents(); } },[auth]);
 
   const persist=(rec)=>{
     if(!BACKEND_URL || !effectiveAuth) return;
@@ -819,12 +885,27 @@ function App(){
         if(d && d.ok){
           setOnline(true);
           setIncidents(list=>list.map(x=>x.ref===rec.ref?{...x, ref:d.reference||rec.ref, synced:true, error:null, photoLink:d.photoLink}:x));
+          loadIncidents(); // refresh from server so it shows everywhere
         } else {
           setOnline(true);
           setIncidents(list=>list.map(x=>x.ref===rec.ref?{...x, synced:false, error:(d&&d.error)||'rejected'}:x));
         }
       })
       .catch(()=>setOnline(false));
+  };
+
+  // change an incident's status via the backend, then refresh
+  const updateStatus=(reference, status)=>{
+    // optimistic local update
+    setIncidents(list=>list.map(x=>x.ref===reference?{...x, status}:x));
+    if(!BACKEND_URL || !effectiveAuth) return Promise.resolve({ok:true});
+    return fetch(BACKEND_URL,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({code:effectiveAuth.code, op:'updateStatus', reference, status, secret:SHARED_SECRET}),
+    }).then(r=>r.json())
+      .then(d=>{ if(d&&d.ok){ setOnline(true); loadIncidents(); } return d; })
+      .catch(()=>{ setOnline(false); return {ok:false,error:'offline'}; });
   };
 
   const submitIncident=(incident)=>{
@@ -861,19 +942,19 @@ function App(){
   let body;
   if(tab==='reports') body=<ReportsScreen incidents={incidents} go={go}/>;
   else if(tab==='sync') body=<SyncScreen incidents={incidents} online={online} onResync={resync}/>;
-  else if(tab==='profile') body=<ProfileScreen profile={profile} setProfile={setProfile} online={online} contactsCount={Object.keys(contacts).length} incidents={incidents} onRefresh={loadContacts} accessRole={effectiveAuth&&effectiveAuth.role} onLogout={auth?logout:null}/>;
+  else if(tab==='profile') body=<ProfileScreen profile={profile} setProfile={setProfile} online={online} contactsCount={Object.keys(contacts).length} incidents={incidents} onRefresh={()=>{loadContacts();loadIncidents();}} accessRole={effectiveAuth&&effectiveAuth.role} onLogout={auth?logout:null}/>;
   else if(cur.screen==='lga') body=<LgaScreen go={go} incidents={incidents}/>;
   else if(cur.screen==='wards') body=<WardScreen go={go} ctx={cur.ctx} contacts={contacts}/>;
   else if(cur.screen==='pus') body=<PuListScreen go={go} ctx={cur.ctx} contacts={contacts} perms={perms}/>;
   else if(cur.screen==='pu') body=<PuScreen go={go} ctx={cur.ctx} incidents={incidents} contacts={contacts} perms={perms}/>;
   else if(cur.screen==='report') body=<ReportScreen go={go} ctx={cur.ctx} onSubmit={submitIncident} profile={profile} lockLocation={scoped}/>;
-  else if(cur.screen==='detail') body=<DetailScreen item={cur.ctx} perms={perms}/>;
+  else if(cur.screen==='detail') body=<DetailScreen item={cur.ctx} perms={perms} incidents={incidents} onUpdateStatus={updateStatus}/>;
 
   return (<div className="bravo-root">
     <style>{CSS}</style>
     <main className="phone-shell">
       <AppHeader onBack={back} showBack={showBack} online={online} role={effectiveAuth&&effectiveAuth.role}/>
-      <div className={`content screen-${screenKey}`}>{body}</div>
+      <div className={`content screen-${screenKey}`} key={screenKey+'-'+stack.length}>{body}</div>
       <BottomNav active={tab} onTab={onTab}/>
     </main>
   </div>);
@@ -884,6 +965,46 @@ const CSS = `
 :root{--green:#078a19;--deep:#006b3a;--light:#eaf7e2;--red:#dc2626;--amber:#f59e0b;--blue:#1d6fe9;--text:#111827;--muted:#64748b;--line:#d9dee7}
 *{box-sizing:border-box}
 html,body{max-width:100%;overflow-x:hidden}
+
+/* ===== motion ===== */
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes popIn{0%{opacity:0;transform:scale(.96)}100%{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* whole-screen entrance: content fades+slides up when it (re)mounts per screen */
+.content{animation:fadeUp .28s cubic-bezier(.22,.61,.36,1) both}
+
+/* staggered entrance for list rows / cards within a screen */
+.lga-card,.ward-card,.pu-row,.result-row,.incident-card,.report-card,.stat-card,.rstat,.statbox,.sync-row,.esc-item{animation:fadeUp .32s cubic-bezier(.22,.61,.36,1) both}
+.lga-list>*:nth-child(1),.ward-list>*:nth-child(1),.pu-list>*:nth-child(1),.report-list>*:nth-child(1),.incident-list>*:nth-child(1){animation-delay:.02s}
+.lga-list>*:nth-child(2),.ward-list>*:nth-child(2),.pu-list>*:nth-child(2),.report-list>*:nth-child(2),.incident-list>*:nth-child(2){animation-delay:.05s}
+.lga-list>*:nth-child(3),.ward-list>*:nth-child(3),.pu-list>*:nth-child(3),.report-list>*:nth-child(3),.incident-list>*:nth-child(3){animation-delay:.08s}
+.lga-list>*:nth-child(4),.ward-list>*:nth-child(4),.pu-list>*:nth-child(4),.report-list>*:nth-child(4),.incident-list>*:nth-child(4){animation-delay:.11s}
+.lga-list>*:nth-child(5),.ward-list>*:nth-child(5),.pu-list>*:nth-child(5),.report-list>*:nth-child(5),.incident-list>*:nth-child(5){animation-delay:.14s}
+.lga-list>*:nth-child(6),.ward-list>*:nth-child(6),.pu-list>*:nth-child(6),.report-list>*:nth-child(6),.incident-list>*:nth-child(6){animation-delay:.17s}
+.lga-list>*:nth-child(n+7),.ward-list>*:nth-child(n+7),.pu-list>*:nth-child(n+7),.report-list>*:nth-child(n+7),.incident-list>*:nth-child(n+7){animation-delay:.19s}
+
+/* tactile press feedback on interactive cards/buttons */
+.lga-card,.ward-card,.pu-row,.result-row,.incident-card,.report-card,.report-btn,.action-grid button,.sev-btn,.chip,.bottom-nav button,.esc-phone,.ghost-btn,.export-btn,.menu-button,.status-opt,.logout-btn{transition:transform .12s ease,box-shadow .18s ease,background .15s ease,border-color .15s ease,color .15s ease}
+.lga-card:active,.ward-card:active,.pu-row:active,.result-row:active,.incident-card:active,.report-card:active,.report-btn:active,.action-grid button:active,.sev-btn:active,.chip:active,.esc-phone:active,.ghost-btn:active,.export-btn:active,.status-opt:active{transform:scale(.975)}
+.lga-card:hover,.ward-card:hover,.pu-row:hover,.result-row:hover,.incident-card:hover,.report-card:hover{box-shadow:0 10px 28px rgba(15,23,42,.10);transform:translateY(-1px)}
+.bottom-nav button:active{transform:scale(.9)}
+
+/* online dot gently pulses; report submit spinner; gate stagger */
+.online span{animation:pulse 2.4s ease-in-out infinite}
+.gate-logo{animation:popIn .5s cubic-bezier(.22,.61,.36,1) both}
+.gate-h1{animation:fadeUp .5s .08s cubic-bezier(.22,.61,.36,1) both}
+.gate-sub{animation:fadeUp .5s .16s cubic-bezier(.22,.61,.36,1) both}
+.gate-input{animation:fadeUp .5s .24s cubic-bezier(.22,.61,.36,1) both}
+.gate-body .report-btn{animation:fadeUp .5s .32s cubic-bezier(.22,.61,.36,1) both}
+
+/* respect users who prefer reduced motion */
+@media(prefers-reduced-motion:reduce){
+  *,.content,.lga-card,.ward-card,.pu-row,.result-row,.incident-card,.report-card,.stat-card,.rstat,.statbox,.sync-row,.esc-item,.gate-logo,.gate-h1,.gate-sub,.gate-input,.gate-body .report-btn,.online span{animation:none!important;transition:none!important}
+}
+
 .bravo-root{background:#eef2f5;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);min-height:100vh;overflow-x:hidden;max-width:100vw}
 .bravo-root button{font:inherit;cursor:pointer}
 .ic{width:24px;height:24px;display:block;flex:none}
@@ -919,11 +1040,12 @@ html,body{max-width:100%;overflow-x:hidden}
 .search-wrap.plain{box-shadow:0 1px 2px rgba(15,23,42,.05)}
 
 /* screen 1 */
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+.incidents-row{margin-bottom:22px}
 .stat-card{border:1px solid var(--line);border-radius:14px;background:#fff;padding:14px 6px;display:grid;justify-items:center;gap:6px;text-align:center;box-shadow:0 6px 16px rgba(15,23,42,.04)}
-.stat-card .green{color:var(--green)}.stat-card .red{color:var(--red)}
+.stat-card .green{color:var(--green)}.stat-card .red{color:var(--red)}.stat-card .amber{color:#d97706}.stat-card .muted{color:#475569}
 .stat-card strong{font-size:20px;font-weight:900}
-.stat-card strong.red{color:var(--red)}
+.stat-card strong.red{color:var(--red)}.stat-card strong.green{color:var(--green)}.stat-card strong.amber{color:#d97706}.stat-card strong.muted{color:#334155}
 .stat-card span{font-size:12px;color:#475569;font-weight:600;line-height:1.2}
 .lga-list{display:grid;gap:12px}
 .lga-card{display:grid;grid-template-columns:54px 1fr 28px;align-items:center;gap:14px;border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px;text-align:left;box-shadow:0 6px 16px rgba(15,23,42,.04)}
@@ -1144,15 +1266,24 @@ html,body{max-width:100%;overflow-x:hidden}
 
 /* login gate + role */
 .phone-shell.gate{padding-bottom:0;display:flex;flex-direction:column;min-height:100vh}
-.gate-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 28px;text-align:center}
-.gate-logo{width:150px;height:90px;object-fit:contain;margin-bottom:18px}
-.gate-h1{font-size:26px;font-weight:900;letter-spacing:-.02em;margin:0 0 8px}
-.gate-sub{font-size:15px;color:#475569;line-height:1.5;margin:0 0 26px;max-width:320px}
+.gate-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 28px 44px;text-align:center;max-width:380px;margin:0 auto;width:100%}
+.gate-logo{width:132px;height:auto;object-fit:contain;margin:0 0 14px}
+.gate-h1{font-size:24px;font-weight:900;letter-spacing:-.02em;margin:0 0 6px}
+.gate-sub{font-size:14px;color:#475569;line-height:1.45;margin:0 0 20px;max-width:300px}
 .gate-input{width:100%;max-width:340px;margin-bottom:8px}
-.gate-body .report-btn{width:100%;max-width:340px;margin-top:10px}
+.gate-body .report-btn{width:100%;max-width:340px;margin-top:8px}
 .role-strip{background:#f1f5f9;border-top:1px solid var(--line);font-size:12.5px;color:#64748b;text-align:center;padding:6px}
 .role-strip strong{color:var(--green);font-weight:800}
 .readonly-note{text-align:center;color:#64748b;font-size:14px;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0}
+.outline-green{border:1.5px solid var(--green);color:var(--green);background:#fff}
+.soft-green{color:#15803d;background:#dcfce7}
+.soft-amber{color:#b45309;background:#fef3c7}
+.status-picker{border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px}
+.status-picker-title{margin:0 0 12px;font-weight:800;font-size:15px}
+.status-options{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+.status-opt{height:46px;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;font-weight:800;color:#475569}
+.status-opt.on{border-color:var(--green);background:var(--light);color:var(--green)}
+.status-opt:disabled{opacity:.5}
 .logout-btn{display:flex;align-items:center;justify-content:center;gap:10px;border:1.5px solid var(--red);color:var(--red);background:#fff;border-radius:12px;height:48px;font-weight:800;padding:0 18px}
 .logout-btn.full{width:100%;margin-top:22px}
 .logout-confirm{margin-top:22px;border:1px solid #fecaca;background:#fef2f2;border-radius:14px;padding:16px}
