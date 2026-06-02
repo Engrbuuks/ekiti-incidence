@@ -141,11 +141,13 @@ const SEARCH_INDEX = (()=>{
   return idx;
 })();
 
-function StatCard({d,value,label,tone}){
-  return (<article className="stat-card"><Ic d={d} className={tone||'green'} size={30}/><strong className={tone||''}>{value}</strong><span>{label}</span></article>);
+function StatCard({d,value,label,tone,onClick}){
+  const inner=(<><Ic d={d} className={tone||'green'} size={30}/><strong className={tone||''}>{value}</strong><span>{label}</span></>);
+  if(onClick) return <button className="stat-card tappable" onClick={onClick}>{inner}</button>;
+  return <article className="stat-card">{inner}</article>;
 }
 
-function LgaScreen({go, incidents}){
+function LgaScreen({go, incidents, onStatusFilter}){
   const [q,setQ]=useState("");
   const query=q.toLowerCase().trim();
 
@@ -155,9 +157,13 @@ function LgaScreen({go, incidents}){
     return SEARCH_INDEX.filter(r=>r.label.toLowerCase().includes(query)||(r.code&&r.code.includes(query))).slice(0,40);
   },[query]);
 
-  const openIncidents = incidents.filter(i=>i.status!=='Resolved').length;
-  const resolvedIncidents = incidents.filter(i=>i.status==='Resolved').length;
-  const totalIncidents = incidents.length;
+  const c = {
+    open: incidents.filter(i=>i.status==='Open').length,
+    progress: incidents.filter(i=>i.status==='In Progress').length,
+    escalated: incidents.filter(i=>i.status==='Escalated').length,
+    resolved: incidents.filter(i=>i.status==='Resolved').length,
+    total: incidents.length,
+  };
 
   const goResult=(r)=>{
     const L=DATA.lgas[r.li];
@@ -192,11 +198,13 @@ function LgaScreen({go, incidents}){
         <StatCard d={P.users} value={TOTAL_WARDS} label="Wards"/>
         <StatCard d={P.pin} value={TOTAL_PUS.toLocaleString()} label="Polling Units"/>
       </section>
-      <h2 className="sec-title">INCIDENTS</h2>
-      <section className="stats-grid incidents-row">
-        <StatCard d={P.alert} value={openIncidents} label="Open" tone="red"/>
-        <StatCard d={P.checkCircle} value={resolvedIncidents} label="Resolved" tone="green"/>
-        <StatCard d={P.reports} value={totalIncidents} label="Total" tone="muted"/>
+      <h2 className="sec-title">INCIDENTS BY STATUS</h2>
+      <section className="status-grid">
+        <StatCard d={P.alert} value={c.open} label="Open" tone="red" onClick={()=>onStatusFilter('Open')}/>
+        <StatCard d={P.clock} value={c.progress} label="In Progress" tone="amber" onClick={()=>onStatusFilter('In Progress')}/>
+        <StatCard d={P.up} value={c.escalated} label="Escalated" tone="red" onClick={()=>onStatusFilter('Escalated')}/>
+        <StatCard d={P.checkCircle} value={c.resolved} label="Resolved" tone="green" onClick={()=>onStatusFilter('Resolved')}/>
+        <StatCard d={P.reports} value={c.total} label="Total" tone="muted" onClick={()=>onStatusFilter('All')}/>
       </section>
       <section className="lga-section">
         <h1 className="sec-title">LOCAL GOVERNMENT AREAS ({TOTAL_LGAS})</h1>
@@ -572,22 +580,22 @@ function ReportScreen({go, ctx, onSubmit, profile, lockLocation}){
 
 /* ===================== TAB: REPORTS ===================== */
 const SEV_ORDER={Critical:0,High:1,Medium:2,Low:3};
-function ReportsScreen({incidents, go}){
+function ReportsScreen({incidents, go, initialFilter}){
   const [q,setQ]=useState("");
-  const [filter,setFilter]=useState("All");
+  const [filter,setFilter]=useState(initialFilter||"All");
   const query=q.toLowerCase().trim();
 
   const counts={
     total:incidents.length,
     open:incidents.filter(i=>i.status==='Open').length,
+    progress:incidents.filter(i=>i.status==='In Progress').length,
+    escalated:incidents.filter(i=>i.status==='Escalated').length,
     resolved:incidents.filter(i=>i.status==='Resolved').length,
-    critical:incidents.filter(i=>i.sev==='Critical').length,
   };
   const filtered=useMemo(()=>{
     let list=incidents.slice().reverse(); // newest first
-    if(filter==='Open') list=list.filter(i=>i.status!=='Resolved');
-    else if(filter==='Critical') list=list.filter(i=>i.sev==='Critical'||i.sev==='High');
-    else if(filter==='Resolved') list=list.filter(i=>i.status==='Resolved');
+    if(filter==='Critical') list=list.filter(i=>i.sev==='Critical'||i.sev==='High');
+    else if(filter!=='All') list=list.filter(i=>i.status===filter);
     if(query) list=list.filter(i=>
       (i.title||'').toLowerCase().includes(query)||
       (i.lga||'').toLowerCase().includes(query)||
@@ -613,12 +621,13 @@ function ReportsScreen({incidents, go}){
     <div className="reports-stats">
       <div className="rstat"><strong>{counts.total}</strong><span>Total</span></div>
       <div className="rstat red"><strong>{counts.open}</strong><span>Open</span></div>
+      <div className="rstat amber"><strong>{counts.progress}</strong><span>In Prog.</span></div>
+      <div className="rstat red"><strong>{counts.escalated}</strong><span>Escalated</span></div>
       <div className="rstat green"><strong>{counts.resolved}</strong><span>Resolved</span></div>
-      <div className="rstat amber"><strong>{counts.critical}</strong><span>Critical</span></div>
     </div>
     <div className="search-wrap plain"><Ic d={P.search} size={24}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search type, location, reporter, code"/>{q&&<button onClick={()=>setQ("")}><Ic d={P.close} size={18}/></button>}</div>
     <div className="filter-chips">
-      {['All','Open','Critical','Resolved'].map(f=>(
+      {['All','Open','In Progress','Escalated','Resolved','Critical'].map(f=>(
         <button key={f} className={`chip ${filter===f?'on':''}`} onClick={()=>setFilter(f)}>{f}</button>))}
     </div>
     {incidents.length>0 && <button className="export-btn" onClick={exportCsv}><Ic d={P.download} size={18}/>Export CSV</button>}
@@ -796,6 +805,7 @@ function App(){
   const [contacts,setContacts]=useState({});   // loaded from backend Contacts tab
   const [online,setOnline]=useState(!!BACKEND_URL);
   const [profile,setProfile]=useState({name:'',phone:'',role:'Party Agent'});
+  const [reportsFilter,setReportsFilter]=useState('All');
   const cur=stack[stack.length-1];
   const go=(screen, ctx)=>{ setTab('home'); setStack(s=>[...s,{screen,ctx}]); };
   const back=()=>setStack(s=>s.length>1?s.slice(0,-1):s);
@@ -939,11 +949,23 @@ function App(){
   const showBack = tab==='home' && stack.length>1;
   const screenKey = (tab!=='home') ? tab : cur.screen;
 
+  const onStatusFilter=(status)=>{ setReportsFilter(status); setTab('reports'); };
+  // label for the back bar = where you'd return to
+  const backLabel = (()=>{
+    if(stack.length<2) return '';
+    const prev=stack[stack.length-2];
+    if(prev.screen==='lga') return 'Local Governments';
+    if(prev.screen==='wards'){ const L=DATA.lgas[prev.ctx.lgaIndex]; return L?`${L.n} Wards`:'Wards'; }
+    if(prev.screen==='pus'){ const L=DATA.lgas[prev.ctx.lgaIndex],w=L&&L.w[prev.ctx.wardIndex]; return w?w.n:'Polling Units'; }
+    if(prev.screen==='pu') return 'Polling Unit';
+    return 'Back';
+  })();
+
   let body;
-  if(tab==='reports') body=<ReportsScreen incidents={incidents} go={go}/>;
+  if(tab==='reports') body=<ReportsScreen incidents={incidents} go={go} initialFilter={reportsFilter} key={'rep-'+reportsFilter}/>;
   else if(tab==='sync') body=<SyncScreen incidents={incidents} online={online} onResync={resync}/>;
   else if(tab==='profile') body=<ProfileScreen profile={profile} setProfile={setProfile} online={online} contactsCount={Object.keys(contacts).length} incidents={incidents} onRefresh={()=>{loadContacts();loadIncidents();}} accessRole={effectiveAuth&&effectiveAuth.role} onLogout={auth?logout:null}/>;
-  else if(cur.screen==='lga') body=<LgaScreen go={go} incidents={incidents}/>;
+  else if(cur.screen==='lga') body=<LgaScreen go={go} incidents={incidents} onStatusFilter={onStatusFilter}/>;
   else if(cur.screen==='wards') body=<WardScreen go={go} ctx={cur.ctx} contacts={contacts}/>;
   else if(cur.screen==='pus') body=<PuListScreen go={go} ctx={cur.ctx} contacts={contacts} perms={perms}/>;
   else if(cur.screen==='pu') body=<PuScreen go={go} ctx={cur.ctx} incidents={incidents} contacts={contacts} perms={perms}/>;
@@ -954,6 +976,7 @@ function App(){
     <style>{CSS}</style>
     <main className="phone-shell">
       <AppHeader onBack={back} showBack={showBack} online={online} role={effectiveAuth&&effectiveAuth.role}/>
+      {showBack && <button className="back-bar" onClick={back}><Ic d={P.back} size={20}/><span>Back to {backLabel}</span></button>}
       <div className={`content screen-${screenKey}`} key={screenKey+'-'+stack.length}>{body}</div>
       <BottomNav active={tab} onTab={onTab}/>
     </main>
@@ -1041,12 +1064,21 @@ html,body{max-width:100%;overflow-x:hidden}
 
 /* screen 1 */
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+.status-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:22px}
 .incidents-row{margin-bottom:22px}
 .stat-card{border:1px solid var(--line);border-radius:14px;background:#fff;padding:14px 6px;display:grid;justify-items:center;gap:6px;text-align:center;box-shadow:0 6px 16px rgba(15,23,42,.04)}
+.stat-card.tappable{cursor:pointer}
+.status-grid .stat-card{padding:12px 4px}
+.status-grid .stat-card span{font-size:10.5px}
 .stat-card .green{color:var(--green)}.stat-card .red{color:var(--red)}.stat-card .amber{color:#d97706}.stat-card .muted{color:#475569}
 .stat-card strong{font-size:20px;font-weight:900}
 .stat-card strong.red{color:var(--red)}.stat-card strong.green{color:var(--green)}.stat-card strong.amber{color:#d97706}.stat-card strong.muted{color:#334155}
 .stat-card span{font-size:12px;color:#475569;font-weight:600;line-height:1.2}
+
+/* clear back bar */
+.back-bar{display:flex;align-items:center;gap:8px;width:100%;border:0;border-bottom:1px solid var(--line);background:#fff;padding:13px 18px;color:var(--green);font-weight:800;font-size:15px}
+.back-bar:active{background:#f1f5f9}
+.back-bar .ic{flex:none}
 .lga-list{display:grid;gap:12px}
 .lga-card{display:grid;grid-template-columns:54px 1fr 28px;align-items:center;gap:14px;border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px;text-align:left;box-shadow:0 6px 16px rgba(15,23,42,.04)}
 .lga-icon{width:54px;height:54px;border-radius:14px;background:var(--light);color:var(--green);display:grid;place-items:center}
