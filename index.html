@@ -85,7 +85,7 @@ const TagIc = ({className=''}) => (<svg className={`ic ${className}`} viewBox="0
 const LocIc = ({className=''}) => (<svg className={`ic ${className}`} viewBox="0 0 24 24" fill="none"><g stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/></g></svg>);
 
 /* ===================== SHARED CHROME ===================== */
-function AppHeader({onBack, showBack, online, role}){
+function AppHeader({onBack, showBack, online, role, onLogout}){
   const roleLabel = role ? role.charAt(0).toUpperCase()+role.slice(1) : '';
   return (
     <header className="top-header">
@@ -100,7 +100,12 @@ function AppHeader({onBack, showBack, online, role}){
           <div className={`online ${online?'':'offline'}`}><span></span>{online?'Online':'Offline'}</div>
         </div>
       </div>
-      {roleLabel && <div className="role-strip">Signed in as <strong>{roleLabel}</strong></div>}
+      {roleLabel && (
+        <div className="role-strip">
+          <span>Signed in as <strong>{roleLabel}</strong></span>
+          {onLogout && <button className="role-logout" onClick={onLogout}><Ic d={P.logout} size={15}/>Sign out</button>}
+        </div>
+      )}
     </header>
   );
 }
@@ -798,7 +803,10 @@ function LoginGate({onAuth}){
 
 /* ===================== ROUTER SHELL ===================== */
 function App(){
-  const [auth,setAuth]=useState(null); // {code, role, perms} once logged in
+  const [auth,setAuth]=useState(()=>{
+    // restore session across refresh (device-local; use Sign out on shared devices)
+    try{ const s=window.localStorage.getItem('bravo_auth'); return s?JSON.parse(s):null; }catch(e){ return null; }
+  });
   const [tab,setTab]=useState('home');
   const [stack,setStack]=useState([{screen:'lga',ctx:null}]);
   const [incidents,setIncidents]=useState([]); // submitted incidents
@@ -933,6 +941,7 @@ function App(){
   const resync=()=>{ incidents.filter(i=>!i.synced).forEach(persist); };
 
   const logout=()=>{
+    try{ window.localStorage.removeItem('bravo_auth'); }catch(e){}
     setAuth(null);
     setIncidents([]);
     setContacts({});
@@ -941,9 +950,14 @@ function App(){
     setOnline(!!BACKEND_URL);
   };
 
+  const doAuth=(a)=>{
+    try{ window.localStorage.setItem('bravo_auth', JSON.stringify(a)); }catch(e){}
+    setAuth(a);
+  };
+
   // gate: if a backend is configured and we're not authed, show the login
   if(BACKEND_URL && !auth){
-    return <LoginGate onAuth={(a)=>{ setAuth(a); }}/>;
+    return <LoginGate onAuth={doAuth}/>;
   }
 
   const showBack = tab==='home' && stack.length>1;
@@ -975,7 +989,7 @@ function App(){
   return (<div className="bravo-root">
     <style>{CSS}</style>
     <main className="phone-shell">
-      <AppHeader onBack={back} showBack={showBack} online={online} role={effectiveAuth&&effectiveAuth.role}/>
+      <AppHeader onBack={back} showBack={showBack} online={online} role={effectiveAuth&&effectiveAuth.role} onLogout={auth?(()=>{ if(window.confirm('Sign out? You will need your access code to sign back in.')) logout(); }):null}/>
       {showBack && <button className="back-bar" onClick={back}><Ic d={P.back} size={20}/><span>Back to {backLabel}</span></button>}
       <div className={`content screen-${screenKey}`} key={screenKey+'-'+stack.length}>{body}</div>
       <BottomNav active={tab} onTab={onTab}/>
@@ -1304,8 +1318,10 @@ html,body{max-width:100%;overflow-x:hidden}
 .gate-sub{font-size:14px;color:#475569;line-height:1.45;margin:0 0 20px;max-width:300px}
 .gate-input{width:100%;max-width:340px;margin-bottom:8px}
 .gate-body .report-btn{width:100%;max-width:340px;margin-top:8px}
-.role-strip{background:#f1f5f9;border-top:1px solid var(--line);font-size:12.5px;color:#64748b;text-align:center;padding:6px}
+.role-strip{background:#f1f5f9;border-top:1px solid var(--line);font-size:12.5px;color:#64748b;display:flex;align-items:center;justify-content:space-between;padding:6px 16px;gap:12px}
 .role-strip strong{color:var(--green);font-weight:800}
+.role-logout{display:inline-flex;align-items:center;gap:5px;border:1px solid #cbd5e1;background:#fff;color:#475569;font-weight:700;font-size:12px;padding:4px 10px;border-radius:8px}
+.role-logout:active{background:#fee2e2;border-color:#fca5a5;color:#b91c1c}
 .readonly-note{text-align:center;color:#64748b;font-size:14px;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:16px;margin:0}
 .outline-green{border:1.5px solid var(--green);color:var(--green);background:#fff}
 .soft-green{color:#15803d;background:#dcfce7}
@@ -1346,7 +1362,7 @@ html,body{max-width:100%;overflow-x:hidden}
   .title-banner{font-size:18px;letter-spacing:.05em;padding:12px}
   .header-row{max-width:1180px;margin:0 auto;height:84px;padding:0 32px}
   .logo{width:170px;height:66px}
-  .role-strip{text-align:right;padding:6px 32px;max-width:1180px;margin:0 auto;width:100%}
+  .role-strip{justify-content:flex-end;gap:16px;padding:6px 32px;max-width:1180px;margin:0 auto;width:100%}
 
   /* centered working area */
   .content{max-width:1180px;margin:0 auto;padding:30px 32px}
