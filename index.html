@@ -4325,11 +4325,12 @@ html,body{max-width:100%;overflow-x:hidden}
   .screen-pus .pu-list{grid-template-columns:repeat(2,1fr)}
 
   /* PU screen: feed left, stats+contacts right */
-  .screen-pu{display:grid;grid-template-columns:1fr 360px;gap:28px;align-items:start}
+  .screen-pu{display:grid;grid-template-columns:1fr 360px;gap:28px 28px;align-items:start}
   .screen-pu > .breadcrumbs, .screen-pu > .pu-head{grid-column:1 / -1}
   .screen-pu .pu-stats{grid-column:1 / -1;max-width:none}
-  .screen-pu .report-btn{grid-column:1 / -1;max-width:380px}
-  .screen-pu .escalation-card{grid-column:2;grid-row:span 3;position:sticky;top:120px;margin:0}
+  .screen-pu .report-btn{grid-column:1;max-width:380px;margin-bottom:0}
+  .screen-pu .escalation-card{grid-column:2;grid-row:2 / span 4;position:sticky;top:120px;margin:0}
+  .screen-pu .police-card{grid-column:1;margin:0}
   .screen-pu .pu-incidents{grid-column:1}
 
   /* REPORT form: centered, readable width (never stretched) */
