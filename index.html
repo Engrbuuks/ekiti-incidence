@@ -3207,7 +3207,22 @@ function PuScreen({
   const open = mine.filter(i => i.status === 'Open').length;
   const prog = mine.filter(i => i.status === 'In Progress').length;
   const resolved = mine.filter(i => i.status === 'Resolved').length;
-  const last = mine.length ? mine[mine.length - 1].time : '—';
+  const fmtTime = t => {
+    if (!t) return '—';
+    const s = String(t);
+    // guard the spreadsheet zero-date / empty-time artifact (1899-12-30)
+    if (s.indexOf('1899') === 0) return '—';
+    // ISO datetime -> HH:MM
+    const d = new Date(s);
+    if (!isNaN(d.getTime()) && s.indexOf('T') > -1) {
+      return d.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+    return s; // already a plain time like "14:32"
+  };
+  const last = mine.length ? fmtTime(mine[mine.length - 1].time) : '—';
   const officers = perms.canUpdateStatus && police ? police[puCode] || [] : [];
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("nav", {
     className: "breadcrumbs"
@@ -4598,7 +4613,7 @@ html,body{max-width:100%;overflow-x:hidden}
 .content{padding:18px}
 .sec-title{font-size:16px;font-weight:900;letter-spacing:-.01em;margin:0 0 12px;text-transform:uppercase}
 .sec-title.nm{text-transform:none;font-size:18px}
-.screen-h1{font-size:30px;font-weight:900;letter-spacing:-.03em;margin:0 0 16px}
+.screen-h1{font-size:26px;font-weight:900;letter-spacing:-.03em;margin:0 0 12px}
 .screen-h1.nm{margin:0 0 6px;font-size:27px}
 .breadcrumbs{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px;margin-bottom:16px}
 .breadcrumbs span{color:var(--green);font-weight:800}
@@ -4661,16 +4676,16 @@ html,body{max-width:100%;overflow-x:hidden}
 .ward-badge.danger{background:var(--red)}.ward-badge.amber{background:#f97316}.ward-badge.muted{background:#64748b}
 
 /* screen 3 */
-.pu-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:18px}
-.pu-sub{font-size:17px;color:#0f172a;margin:8px 0 0;line-height:1.4}
+.pu-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:12px}
+.pu-sub{font-size:15px;color:#0f172a;margin:5px 0 0;line-height:1.35}
 .ghost-btn{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--green);border-radius:12px;padding:8px 12px;font-size:13px;font-weight:900;color:var(--green);background:#fff;white-space:nowrap}
-.pu-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
-.statbox{border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:12px 6px;text-align:center}
+.pu-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.statbox{border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:9px 4px;text-align:center}
 .statbox.red{border-color:#fecaca;color:#b91c1c}.statbox.amber{border-color:#fde68a;color:#d97706}.statbox.green{border-color:#bbf7d0;color:#15803d}.statbox.neutral{color:#334155}
-.sb-label{font-size:12.5px;font-weight:700;margin:0}
-.sb-value{font-size:26px;font-weight:900;margin:6px 0 0;letter-spacing:-.02em}
-.sb-value.sm{font-size:18px;color:#0f172a}
-.report-btn{display:flex;align-items:center;justify-content:center;gap:14px;width:100%;height:60px;border:0;border-radius:16px;background:var(--green);color:#fff;font-size:21px;font-weight:900;box-shadow:0 10px 24px rgba(7,138,25,.28);margin-bottom:26px}
+.sb-label{font-size:11px;font-weight:700;margin:0}
+.sb-value{font-size:22px;font-weight:900;margin:3px 0 0;letter-spacing:-.02em}
+.sb-value.sm{font-size:14px;color:#0f172a}
+.report-btn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;height:52px;border:0;border-radius:14px;background:var(--green);color:#fff;font-size:18px;font-weight:900;box-shadow:0 8px 20px rgba(7,138,25,.26);margin-bottom:18px}
 .section-head{display:flex;justify-content:space-between;align-items:center}
 .filter-btn{border:0;background:transparent;color:#0f172a;font-weight:700;display:flex;align-items:center;gap:8px}
 .incident-list{display:grid;gap:14px}
