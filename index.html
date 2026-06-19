@@ -2638,12 +2638,7 @@ function PuScreen({
   }, /*#__PURE__*/React.createElement(Ic, {
     d: P.plus,
     size: 30
-  }), "Report New Incident"), (perms.canUpdateStatus || perms.scope === 'all') && /*#__PURE__*/React.createElement(EscalationContacts, {
-    lgaName: L.n,
-    wardName: w.n,
-    contacts: contacts,
-    label: "ESCALATION CONTACTS (THIS WARD)"
-  }), perms.canUpdateStatus && officers.length > 0 && /*#__PURE__*/React.createElement("section", {
+  }), "Report New Incident"), perms.canUpdateStatus && officers.length > 0 && /*#__PURE__*/React.createElement("section", {
     className: "police-card"
   }, /*#__PURE__*/React.createElement("h2", {
     className: "sec-title nm"
